@@ -104,12 +104,38 @@ alert_email        = "your-email@domain.com"
 - CloudWatch Metrics: `Custom/Nginx` namespace
 - CloudWatch Alarms: `NginxDown` metric
 
+## CI/CD
+
+This project uses GitHub Actions for CI/CD. The workflow will:
+- Format and validate Terraform code
+- Plan changes on pull requests
+- Automatically apply changes when merged to main
+
+## Monitoring with Prometheus and Grafana
+
+This infrastructure includes Prometheus and Grafana installed on the EC2 instance for monitoring server metrics.
+
+- **Prometheus**: Collects metrics from the Node Exporter running on the EC2 instance.
+- **Grafana**: Visualizes the collected metrics through dashboards.
+
+### Accessing the Monitoring Stack
+
+To access Prometheus and Grafana, use the public IP address of the EC2 instance:
+
+- **Prometheus UI**: `http://<EC2_Public_IP>:9090`
+- **Grafana UI**: `http://<EC2_Public_IP>:3000`
+
+**Note:** By default, access is open to the internet (`0.0.0.0/0`). For production environments, you should restrict access to specific IP ranges or use a VPN.
+
+- **Grafana Default Credentials:** admin / admin (You will be prompted to change this on first login)
+
 ## Security
 
 - HTTPS enforced with HTTP to HTTPS redirection
 - Security groups restrict access
 - IAM roles with least privilege principle
 - SSL/TLS encryption
+- All sensitive variables are stored as GitHub secrets
 
 ## Maintenance
 
@@ -143,4 +169,8 @@ terraform destroy
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests. 
+Feel free to submit issues and enhancement requests.
+
+## License
+
+MIT 
