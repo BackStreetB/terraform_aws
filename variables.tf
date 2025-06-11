@@ -1,18 +1,19 @@
 variable "region" {
   description = "AWS region"
   type        = string
-  default     = "us-east-1"
+  default     = "ap-southeast-1"
 }
 
-variable "ami_id" {
-  description = "AMI ID for EC2 instance"
+variable "environment" {
+  description = "Environment name"
   type        = string
+  default     = "production"
 }
 
-variable "instance_type" {
-  description = "EC2 instance type"
+variable "project" {
+  description = "Project name"
   type        = string
-  default     = "t2.micro"
+  default     = "nginx-monitoring"
 }
 
 variable "vpc_cidr" {
@@ -24,43 +25,52 @@ variable "vpc_cidr" {
 variable "public_subnet_a" {
   description = "CIDR block for public subnet A"
   type        = string
+  default     = "10.0.1.0/24"
 }
 
 variable "public_subnet_b" {
   description = "CIDR block for public subnet B"
   type        = string
+  default     = "10.0.2.0/24"
 }
 
-variable "environment" {
-  description = "Environment name"
+variable "ami_id" {
+  description = "AMI ID for EC2 instance"
   type        = string
-  default     = "dev"
+  default     = "ami-0df7a207adb9748c7" # Amazon Linux 2 in ap-southeast-1
 }
 
-variable "project" {
-  description = "Project name"
+variable "instance_type" {
+  description = "Instance type for EC2"
   type        = string
-  default     = "nginx-autohealing"
-}
-
-variable "alert_email" {
-  description = "Email address for SNS alerts."
-  type        = string
+  default     = "t2.micro"
 }
 
 variable "domain_name" {
-  description = "Your domain name"
+  description = "Domain name for the application"
   type        = string
+  default     = "demo.awsthanhbinhit.com"
 }
 
 variable "hosted_zone_id" {
-  description = "Your Route 53 hosted zone ID"
+  description = "Route53 hosted zone ID"
   type        = string
 }
 
 variable "acm_certificate_arn" {
-  description = "ARN of the ACM certificate"
+  description = "ACM certificate ARN for HTTPS"
   type        = string
+}
+
+variable "alert_email" {
+  description = "Email address for alerts"
+  type        = string
+}
+
+variable "bastion_ssh_cidr" {
+  description = "CIDR block for bastion host SSH access"
+  type        = string
+  default     = "0.0.0.0/0"
 }
 
 variable "bastion_ami_id" {
@@ -71,12 +81,17 @@ variable "bastion_ami_id" {
 variable "bastion_instance_type" {
   description = "The instance type for the Bastion host."
   type        = string
-  default     = "t3.micro"
+  default     = "t2.micro"
 }
 
-variable "bastion_ssh_cidr" {
-  description = "The CIDR block that is allowed to SSH into the Bastion host."
+variable "monitoring_ami_id" {
+  description = "AMI ID for the monitoring instance"
   type        = string
-  # !!! IMPORTANT: Replace with your actual public IP or a secure CIDR block !!!
-  default     = "0.0.0.0/0" # <-- CHANGE THIS IN YOUR .tfvars or when applying
+  default     = "ami-04173560437081c75" # Amazon Linux 2023 AMI in ap-southeast-1
+}
+
+variable "monitoring_instance_type" {
+  description = "Instance type for the monitoring instance"
+  type        = string
+  default     = "t2.micro" # Free tier eligible
 }
