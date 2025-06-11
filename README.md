@@ -118,24 +118,36 @@ This infrastructure includes Prometheus and Grafana installed on the EC2 instanc
 - **Prometheus**: Collects metrics from the Node Exporter running on the EC2 instance.
 - **Grafana**: Visualizes the collected metrics through dashboards.
 
-### Accessing the Monitoring Stack
+### Accessing the Monitoring Stack via Bastion Host
 
-To access Prometheus and Grafana, use the public IP address of the EC2 instance:
+To access Prometheus and Grafana UIs, you must first connect to the Bastion Host using SSH Tunneling.
 
-- **Prometheus UI**: `http://<EC2_Public_IP>:9090`
-- **Grafana UI**: `http://<EC2_Public_IP>:3000`
+1.  **Ensure you have an SSH key pair** configured for your EC2 instances.
+2.  **Get the Public IP** of the Bastion Host and the **Private IP** of the Nginx EC2 instance from the AWS Management Console or Terraform outputs.
+3.  **Use SSH Tunneling** from your local machine. Replace `~/.ssh/your-key.pem` with your key file path, `ec2-user` with the correct user for your Bastion AMI, `<Bastion_Public_IP>` with the Bastion's public IP, and `<Nginx_Private_IP>` with the Nginx instance's private IP.
 
-**Note:** By default, access is open to the internet (`0.0.0.0/0`). For production environments, you should restrict access to specific IP ranges or use a VPN.
+    For **Prometheus UI** (access locally at `http://localhost:9090`):
+
+    ```bash
+    ssh -i ~/.ssh/your-key.pem -L 9090:<Nginx_Private_IP>:9090 ec2-user@<Bastion_Public_IP>
+    ```
+
+    For **Grafana UI** (access locally at `http://localhost:3000`):
+
+    ```bash
+    ssh -i ~/.ssh/your-key.pem -L 3000:<Nginx_Private_IP>:3000 ec2-user@<Bastion_Public_IP>
+    ```
+
+**Note:** The Security Groups are configured to only allow access to Prometheus and Grafana ports (9090, 3000) from the Bastion Host's Security Group.
 
 - **Grafana Default Credentials:** admin / admin (You will be prompted to change this on first login)
 
 ## Security
 
-- HTTPS enforced with HTTP to HTTPS redirection
-- Security groups restrict access
-- IAM roles with least privilege principle
-- SSL/TLS encryption
+- Access to Prometheus and Grafana UIs is restricted via Bastion Host and Security Groups.
 - All sensitive variables are stored as GitHub secrets
+- IAM roles follow principle of least privilege
+- Security groups are configured with minimal required access
 
 ## Maintenance
 

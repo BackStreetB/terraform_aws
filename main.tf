@@ -109,14 +109,14 @@ resource "aws_security_group" "ec2_sg" {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [aws_security_group.bastion_sg.id]
   }
 
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [aws_security_group.bastion_sg.id]
   }
 
   tags = merge(local.common_tags, {
@@ -161,6 +161,58 @@ resource "aws_instance" "nginx" {
 
   tags = merge(local.common_tags, {
     Name = "${var.project}-nginx-server"
+  })
+}
+
+# Bastion Host Security Group
+resource "aws_security_group" "bastion_sg" {
+  name        = "${var.project}-bastion-sg"
+  description = "Allow SSH access to Bastion Host and egress to Nginx instance"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.bastion_ssh_cidr]
+  }
+
+  egress {
+    from_port       = 22
+    to_port         = 22
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2_sg.id]
+  }
+
+  egress {
+    from_port       = 9090
+    to_port         = 9090
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2_sg.id]
+  }
+
+  egress {
+    from_port       = 3000
+    to_port         = 3000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2_sg.id]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-bastion-sg"
+  })
+}
+
+# Bastion Host EC2 Instance
+resource "aws_instance" "bastion" {
+  ami                    = var.bastion_ami_id
+  instance_type          = var.bastion_instance_type
+  subnet_id              = aws_subnet.public_a.id # Place bastion in a public subnet
+  security_groups        = [aws_security_group.bastion_sg.id]
+  associate_public_ip_address = true
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-bastion-host"
   })
 }
 

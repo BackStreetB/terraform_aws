@@ -44,7 +44,7 @@ variable "project" {
 }
 
 variable "alert_email" {
-  description = "Email address to receive alert notifications"
+  description = "Email address for SNS alerts."
   type        = string
 }
 
@@ -61,4 +61,22 @@ variable "hosted_zone_id" {
 variable "acm_certificate_arn" {
   description = "ARN of the ACM certificate"
   type        = string
+}
+
+variable "bastion_ami_id" {
+  description = "The AMI ID for the Bastion host."
+  type        = string
+}
+
+variable "bastion_instance_type" {
+  description = "The instance type for the Bastion host."
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "bastion_ssh_cidr" {
+  description = "The CIDR block that is allowed to SSH into the Bastion host."
+  type        = string
+  # !!! IMPORTANT: Replace with your actual public IP or a secure CIDR block !!!
+  default     = "0.0.0.0/0" # <-- CHANGE THIS IN YOUR .tfvars or when applying
 }
