@@ -88,13 +88,20 @@ resource "aws_security_group" "alb_sg" {
 
 resource "aws_security_group" "ec2_sg" {
   name        = "ec2-nginx-sg"
-  description = "Allow from ALB"
+  description = "Allow traffic to Nginx instance"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
 
@@ -105,24 +112,58 @@ resource "aws_security_group" "ec2_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    from_port   = 9090
-    to_port     = 9090
-    protocol    = "tcp"
-    security_groups = [aws_security_group.bastion_sg.id]
-  }
-
-  ingress {
-    from_port   = 3000
-    to_port     = 3000
-    protocol    = "tcp"
-    security_groups = [aws_security_group.bastion_sg.id]
-  }
-
   tags = merge(local.common_tags, {
     Name = "${var.project}-ec2-sg"
   })
 }
+
+# Ingress rules from bastion_sg to ec2_sg
+resource "aws_security_group_rule" "ec2_ingress_ssh_from_bastion" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.bastion_sg.id
+}
+
+resource "aws_security_group_rule" "ec2_ingress_3000_from_bastion" {
+  type              = "ingress"
+  from_port         = 3000
+  to_port           = 3000
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.bastion_sg.id
+}
+
+resource "aws_security_group_rule" "ec2_ingress_9090_from_bastion" {
+  type              = "ingress"
+  from_port         = 9090
+  to_port           = 9090
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.bastion_sg.id
+}
+
+resource "aws_security_group_rule" "ec2_ingress_9100_from_bastion" {
+  type              = "ingress"
+  from_port         = 9100
+  to_port           = 9100
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.bastion_sg.id
+}
+
+resource "aws_security_group_rule" "ec2_ingress_9115_from_bastion" {
+  type              = "ingress"
+  from_port         = 9115
+  to_port           = 9115
+  protocol          = "tcp"
+  security_group_id = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.bastion_sg.id
+}
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role" "ec2_ssm" {
   name = "nginx-autohealing-ec2-ssm-role"
@@ -151,6 +192,27 @@ resource "aws_iam_instance_profile" "ec2_ssm_profile" {
   role = aws_iam_role.ec2_ssm.name
 }
 
+resource "aws_iam_role_policy" "ec2_ssm_session_manager" {
+  name = "${var.project}-ec2-ssm-session-manager-policy"
+  role = aws_iam_role.ec2_ssm.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ssm:StartSession"
+        ],
+        Resource = [
+          "arn:aws:ec2:${var.region}:${data.aws_caller_identity.current.account_id}:instance/*",
+          "arn:aws:ssm:${var.region}::document/SSM-SessionManagerRunShell"
+        ]
+      }
+    ]
+  })
+}
+
 resource "aws_instance" "nginx" {
   ami                  = var.ami_id
   instance_type        = var.instance_type
@@ -161,58 +223,6 @@ resource "aws_instance" "nginx" {
 
   tags = merge(local.common_tags, {
     Name = "${var.project}-nginx-server"
-  })
-}
-
-# Bastion Host Security Group
-resource "aws_security_group" "bastion_sg" {
-  name        = "${var.project}-bastion-sg"
-  description = "Allow SSH access to Bastion Host and egress to Nginx instance"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.bastion_ssh_cidr]
-  }
-
-  egress {
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2_sg.id]
-  }
-
-  egress {
-    from_port       = 9090
-    to_port         = 9090
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2_sg.id]
-  }
-
-  egress {
-    from_port       = 3000
-    to_port         = 3000
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2_sg.id]
-  }
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project}-bastion-sg"
-  })
-}
-
-# Bastion Host EC2 Instance
-resource "aws_instance" "bastion" {
-  ami                    = var.bastion_ami_id
-  instance_type          = var.bastion_instance_type
-  subnet_id              = aws_subnet.public_a.id # Place bastion in a public subnet
-  security_groups        = [aws_security_group.bastion_sg.id]
-  associate_public_ip_address = true
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project}-bastion-host"
   })
 }
 
@@ -486,4 +496,214 @@ resource "aws_iam_role_policy" "ec2_logs_inline" {
       }
     ]
   })
+}
+
+# Bastion Host Security Group
+resource "aws_security_group" "bastion_sg" {
+  name        = "${var.project}-bastion-sg"
+  description = "Allow SSH access to Bastion Host and egress to Nginx instance"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.bastion_ssh_cidr]
+  }
+
+  egress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.public_a.cidr_block]
+  }
+
+  egress {
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.public_a.cidr_block]
+  }
+
+  egress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.public_a.cidr_block]
+  }
+
+  egress {
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.public_a.cidr_block]
+  }
+
+  egress {
+    from_port   = 9115
+    to_port     = 9115
+    protocol    = "tcp"
+    cidr_blocks = [aws_subnet.public_a.cidr_block]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-bastion-sg"
+  })
+}
+
+# Bastion Host EC2 Instance
+resource "aws_instance" "bastion" {
+  ami                    = var.bastion_ami_id
+  instance_type          = var.bastion_instance_type
+  subnet_id              = aws_subnet.public_a.id # Place bastion in a public subnet
+  security_groups        = [aws_security_group.bastion_sg.id]
+  associate_public_ip_address = true
+  iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.name # Attach SSM Instance Profile
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-bastion-host"
+  })
+}
+
+# Prometheus + Grafana Monitoring Instance Security Group
+resource "aws_security_group" "monitoring_sg" {
+  name        = "${var.project}-monitoring-sg"
+  description = "Allow access to Prometheus and Grafana"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 9090
+    to_port     = 9090
+    protocol    = "tcp"
+    cidr_blocks = [var.bastion_ssh_cidr]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = [var.bastion_ssh_cidr]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-monitoring-sg"
+  })
+}
+
+# IAM Role for Monitoring Instance
+resource "aws_iam_role" "monitoring_role" {
+  name = "${var.project}-monitoring-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Action = "sts:AssumeRole",
+      Effect = "Allow",
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "monitoring_policy" {
+  name = "${var.project}-monitoring-policy"
+  role = aws_iam_role.monitoring_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "cloudwatch:PutMetricData",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:ListMetrics",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_instance_profile" "monitoring_profile" {
+  name = "${var.project}-monitoring-profile"
+  role = aws_iam_role.monitoring_role.name
+}
+
+# Prometheus + Grafana Monitoring Instance
+resource "aws_instance" "monitoring" {
+  ami                    = var.monitoring_ami_id
+  instance_type          = var.monitoring_instance_type
+  subnet_id              = aws_subnet.public_a.id
+  security_groups        = [aws_security_group.monitoring_sg.id]
+  associate_public_ip_address = true
+  iam_instance_profile   = aws_iam_instance_profile.monitoring_profile.name
+  user_data              = file("monitoring_userdata.sh")
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project}-monitoring"
+  })
+}
+
+# CloudWatch Alarm for NGINX Status
+resource "aws_cloudwatch_metric_alarm" "nginx_status" {
+  alarm_name          = "${var.project}-nginx-status"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "nginx_up"
+  namespace           = "Nginx"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 1
+  alarm_description   = "Trigger when NGINX is down"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    InstanceId = aws_instance.nginx.id
+  }
+
+  tags = local.common_tags
+}
+
+# CloudWatch Alarm for NGINX Active Connections
+resource "aws_cloudwatch_metric_alarm" "nginx_connections" {
+  alarm_name          = "${var.project}-nginx-connections"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "nginx_connections_active"
+  namespace           = "Nginx"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 1000
+  alarm_description   = "Trigger when NGINX active connections exceed threshold"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    InstanceId = aws_instance.nginx.id
+  }
+
+  tags = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "monitoring_ssm_attach" {
+  role       = aws_iam_role.monitoring_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
