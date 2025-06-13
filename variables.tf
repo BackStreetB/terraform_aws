@@ -37,7 +37,7 @@ variable "public_subnet_b" {
 variable "ami_id" {
   description = "AMI ID for EC2 instance"
   type        = string
-  default     = "ami-0df7a207adb9748c7" # Amazon Linux 2 in ap-southeast-1
+  default     = "ami-01030bb0f9b7640ac" # Amazon Linux 2 in ap-southeast-1
 }
 
 variable "instance_type" {
@@ -79,7 +79,7 @@ variable "bastion_ssh_cidr" {
 variable "bastion_ami_id" {
   description = "The AMI ID for the Bastion host."
   type        = string
-  default     = "ami-0df7a207adb9748c7" # Amazon Linux 2 in ap-southeast-1, same as nginx ami_id
+  default     = "ami-01030bb0f9b7640ac" # Amazon Linux 2 in ap-southeast-1, same as nginx ami_id
 }
 
 variable "bastion_instance_type" {
