@@ -55,6 +55,7 @@ variable "domain_name" {
 variable "hosted_zone_id" {
   description = "Route53 hosted zone ID"
   type        = string
+  default     = "Z0138079289SZ7QRTK08M"
 }
 
 variable "acm_certificate_arn" {
@@ -65,6 +66,7 @@ variable "acm_certificate_arn" {
 variable "alert_email" {
   description = "Email address for alerts"
   type        = string
+  default     = "thanhbinhit.hcm@gmail.com"
 }
 
 variable "bastion_ssh_cidr" {
@@ -76,6 +78,7 @@ variable "bastion_ssh_cidr" {
 variable "bastion_ami_id" {
   description = "The AMI ID for the Bastion host."
   type        = string
+  default     = "ami-0df7a207adb9748c7" # Amazon Linux 2 in ap-southeast-1, same as nginx ami_id
 }
 
 variable "bastion_instance_type" {
