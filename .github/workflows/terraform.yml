@@ -39,10 +39,10 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" -var="alert_email=${{ secrets.ALERT_EMAIL }}"
+        run: terraform plan -no-color
         continue-on-error: true # Cho phép job tiếp tục ngay cả khi plan có lỗi (ví dụ: pending changes)
 
       - name: Terraform Apply
         id: apply
         if: steps.plan.outcome == 'success' || steps.plan.outcome == 'failure' # Chạy apply nếu plan thành công hoặc có lỗi cảnh báo
-        run: terraform apply -auto-approve -var="acm_certificate_arn=${{ secrets.ACM_CERTIFICATE_ARN }}" -var="alert_email=${{ secrets.ALERT_EMAIL }}" 
+        run: terraform apply -auto-approve 

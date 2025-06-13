@@ -61,6 +61,7 @@ variable "hosted_zone_id" {
 variable "acm_certificate_arn" {
   description = "ACM certificate ARN for HTTPS"
   type        = string
+  default     = "arn:aws:acm:ap-southeast-1:637423552734:certificate/57d3f451-513b-4977-bfea-419c42111a5f"
 }
 
 variable "alert_email" {
