@@ -34,12 +34,6 @@ variable "public_subnet_b" {
   default     = "10.0.2.0/24"
 }
 
-variable "ami_id" {
-  description = "AMI ID for EC2 instance"
-  type        = string
-  default     = "ami-01030bb0f9b7640ac" # Amazon Linux 2 in ap-southeast-1
-}
-
 variable "instance_type" {
   description = "Instance type for EC2"
   type        = string
@@ -70,16 +64,28 @@ variable "alert_email" {
   default     = "thanhbinhit.hcm@gmail.com"
 }
 
+variable "monitoring_ip_cidr" {
+  description = "CIDR block of your local machine for Prometheus to access the Nginx exporter. Find yours at https://www.whatismyip.com/"
+  type        = string
+  default     = "113.161.43.208/32"
+}
+
 variable "bastion_ssh_cidr" {
   description = "CIDR block for bastion host SSH access"
   type        = string
   default     = "0.0.0.0/0"
 }
 
+variable "ami_id" {
+  description = "AMI ID for EC2 instance"
+  type        = string
+  default     = "ami-01030bb0f9b7640ac" 
+}
+
 variable "bastion_ami_id" {
   description = "The AMI ID for the Bastion host."
   type        = string
-  default     = "ami-01030bb0f9b7640ac" # Amazon Linux 2 in ap-southeast-1, same as nginx ami_id
+  default     = "ami-01030bb0f9b7640ac" 
 }
 
 variable "bastion_instance_type" {
@@ -88,14 +94,14 @@ variable "bastion_instance_type" {
   default     = "t2.micro"
 }
 
-variable "monitoring_ami_id" {
-  description = "AMI ID for the monitoring instance"
+variable "s3_backend_bucket" {
+  description = "S3 bucket to store Terraform state"
   type        = string
-  default     = "ami-04173560437081c75" # Amazon Linux 2023 AMI in ap-southeast-1
+  default     = "terraform-binhbe"
 }
 
-variable "monitoring_instance_type" {
-  description = "Instance type for the monitoring instance"
+variable "s3_backend_key" {
+  description = "Key for the Terraform state file in S3"
   type        = string
-  default     = "t2.micro" # Free tier eligible
+  default     = "terraform.tfstate"
 }

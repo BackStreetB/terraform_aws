@@ -37,13 +37,3 @@ output "bastion_public_ip" {
   description = "Public IPv4 address of the Bastion Host EC2 instance."
   value       = aws_instance.bastion.public_ip
 }
-
-output "monitoring_instance_id" {
-  description = "ID of the Monitoring EC2 instance."
-  value       = aws_instance.monitoring.id
-}
-
-output "monitoring_public_ip" {
-  description = "Public IPv4 address of the Monitoring EC2 instance."
-  value       = aws_instance.monitoring.public_ip
-}

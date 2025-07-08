@@ -105,6 +105,14 @@ resource "aws_security_group" "ec2_sg" {
     security_groups = [aws_security_group.alb_sg.id]
   }
 
+  ingress {
+    description = "Allow Prometheus to scrape metrics"
+    from_port   = 9113
+    to_port     = 9113
+    protocol    = "tcp"
+    cidr_blocks = [var.monitoring_ip_cidr]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -219,7 +227,7 @@ resource "aws_instance" "nginx" {
   subnet_id            = aws_subnet.public_a.id
   security_groups      = [aws_security_group.ec2_sg.id]
   iam_instance_profile = aws_iam_instance_profile.ec2_ssm_profile.name
-  user_data            = file("userdata.sh")
+  user_data            = file("nginx_userdata.sh")
 
   tags = merge(local.common_tags, {
     Name = "${var.project}-nginx-server"
@@ -389,93 +397,23 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_cloudwatch_log_group" "nginx_error_log" {
-  name              = "/var/log/nginx/error.log"
-  retention_in_days = 7
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_log_metric_filter" "nginx_shutdown_filter" {
-  name           = "${var.project}-nginx-shutdown-filter"
-  log_group_name = aws_cloudwatch_log_group.nginx_error_log.name
-  pattern        = "\"shutting down|exiting|exit\""
-  metric_transformation {
-    name      = "NginxDown"
-    namespace = "Custom/Nginx"
-    value     = "1"
-  }
-  depends_on = [aws_cloudwatch_log_group.nginx_error_log]
-}
-
-resource "aws_ssm_document" "cloudwatch_agent_config" {
-  name          = "${var.project}-cw-agent-config"
-  document_type = "Command"
-
-  content = jsonencode({
-    schemaVersion = "2.2"
-    description   = "Configure CloudWatch Agent to push nginx error log"
-    parameters    = {}
-    mainSteps = [
-      {
-        action = "aws:runShellScript"
-        name   = "configureCWAgent"
-        inputs = {
-          runCommand = [
-            "sudo yum install -y amazon-cloudwatch-agent",
-            "echo '{",
-            "  \"logs\": {",
-            "    \"logs_collected\": {",
-            "      \"files\": {",
-            "        \"collect_list\": [",
-            "          {",
-            "            \"file_path\": \"/var/log/nginx/error.log\",",
-            "            \"log_group_name\": \"${aws_cloudwatch_log_group.nginx_error_log.name}\",",
-            "            \"log_stream_name\": \"nginx-error\",",
-            "            \"multi_line_start_pattern\": \"^\\\\[\"",
-            "          }",
-            "        ]",
-            "      }",
-            "    }",
-            "  }",
-            "}' | sudo tee /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json",
-            "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a stop",
-            "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a start -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s"
-          ]
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_ssm_association" "cw_agent_run" {
-  name             = aws_ssm_document.cloudwatch_agent_config.name
-  association_name = "${var.project}-cw-agent-association"
-
-  targets {
-    key    = "tag:Name"
-    values = ["${var.project}-nginx-server"]
-  }
-
-  depends_on = [aws_instance.nginx, aws_cloudwatch_log_group.nginx_error_log]
-}
-
 resource "aws_cloudwatch_metric_alarm" "nginx_down" {
   alarm_name          = "${var.project}-nginx-down"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "NginxDown"
-  namespace           = "Custom/Nginx"
-  period              = 60
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "UnHealthyHostCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = "60"
   statistic           = "Average"
-  threshold           = 0
-  alarm_description   = "Trigger when NGINX is down"
+  threshold           = "1"
+  alarm_description   = "This metric monitors ec2 nginx instance is down"
   alarm_actions       = [aws_sns_topic.alerts.arn]
+  ok_actions          = [aws_sns_topic.alerts.arn]
 
   dimensions = {
-    InstanceId = aws_instance.nginx.id
+    TargetGroup = aws_lb_target_group.tg.arn_suffix
+    LoadBalancer = aws_lb.alb.arn_suffix
   }
-
-  tags = local.common_tags
 }
 
 resource "aws_iam_role_policy" "ec2_logs_inline" {
@@ -501,7 +439,7 @@ resource "aws_iam_role_policy" "ec2_logs_inline" {
 # Bastion Host Security Group
 resource "aws_security_group" "bastion_sg" {
   name        = "${var.project}-bastion-sg"
-  description = "Allow SSH access to Bastion Host and egress to Nginx instance"
+  description = "Security group for the bastion host"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -572,9 +510,8 @@ resource "aws_instance" "bastion" {
   })
 }
 
-# Prometheus + Grafana Monitoring Instance Security Group
-resource "aws_security_group" "monitoring_sg" {
-  name        = "${var.project}-monitoring-sg"
+resource "aws_security_group" "promgraf_sg" {
+  name        = "promgraf-sg"
   description = "Allow access to Prometheus and Grafana"
   vpc_id      = aws_vpc.main.id
 
@@ -582,128 +519,92 @@ resource "aws_security_group" "monitoring_sg" {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = [var.bastion_ssh_cidr]
+    cidr_blocks = ["${var.bastion_ssh_cidr}"] # Chỉ cho phép IP của bạn truy cập Prometheus
   }
-
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = [var.bastion_ssh_cidr]
+    cidr_blocks = ["${var.bastion_ssh_cidr}"] # Chỉ cho phép IP của bạn truy cập Grafana
   }
-
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project}-monitoring-sg"
-  })
+  tags = merge(local.common_tags, { Name = "promgraf-sg" })
 }
 
-# IAM Role for Monitoring Instance
-resource "aws_iam_role" "monitoring_role" {
-  name = "${var.project}-monitoring-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [{
-      Action = "sts:AssumeRole",
-      Effect = "Allow",
-      Principal = {
-        Service = "ec2.amazonaws.com"
-      }
-    }]
-  })
+resource "aws_security_group_rule" "nginx_exporter_from_promgraf" {
+  type                     = "ingress"
+  from_port                = 8000
+  to_port                  = 8000
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.ec2_sg.id
+  source_security_group_id = aws_security_group.promgraf_sg.id
 }
 
-resource "aws_iam_role_policy" "monitoring_policy" {
-  name = "${var.project}-monitoring-policy"
-  role = aws_iam_role.monitoring_role.id
-
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Action = [
-          "cloudwatch:PutMetricData",
-          "cloudwatch:GetMetricStatistics",
-          "cloudwatch:ListMetrics",
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogStreams"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
-}
-
-resource "aws_iam_instance_profile" "monitoring_profile" {
-  name = "${var.project}-monitoring-profile"
-  role = aws_iam_role.monitoring_role.name
-}
-
-# Prometheus + Grafana Monitoring Instance
-resource "aws_instance" "monitoring" {
-  ami                    = var.monitoring_ami_id
-  instance_type          = var.monitoring_instance_type
-  subnet_id              = aws_subnet.public_a.id
-  security_groups        = [aws_security_group.monitoring_sg.id]
+resource "aws_instance" "promgraf" {
+  ami                         = var.ami_id
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public_a.id
+  vpc_security_group_ids      = [aws_security_group.promgraf_sg.id]
   associate_public_ip_address = true
-  iam_instance_profile   = aws_iam_instance_profile.monitoring_profile.name
-  user_data              = file("monitoring_userdata.sh")
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project}-monitoring"
-  })
+  iam_instance_profile        = aws_iam_instance_profile.ec2_ssm_profile.name
+  tags = merge(local.common_tags, { Name = "promgraf-server" })
+  user_data = <<-EOF
+#!/bin/bash
+set -ex
+# Cài đặt Docker và docker-compose
+amazon-linux-extras install docker -y
+systemctl enable docker
+systemctl start docker
+usermod -a -G docker ec2-user
+curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+# Lấy private IP của Nginx instance
+NGINX_IP="${aws_instance.nginx.private_ip}"
+# Tạo file prometheus.yml
+cat <<EOP > /home/ec2-user/prometheus.yml
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: 'nginx'
+    static_configs:
+      - targets: ['${aws_instance.nginx.private_ip}:8000']
+EOP
+# Tạo file docker-compose.yml
+cat <<EOC > /home/ec2-user/docker-compose.yml
+version: '3'
+services:
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+EOC
+cd /home/ec2-user
+docker-compose up -d --force-recreate
+chown ec2-user:ec2-user /home/ec2-user/prometheus.yml /home/ec2-user/docker-compose.yml
+EOF
 }
 
-# CloudWatch Alarm for NGINX Status
-resource "aws_cloudwatch_metric_alarm" "nginx_status" {
-  alarm_name          = "${var.project}-nginx-status"
-  comparison_operator = "LessThanThreshold"
-  evaluation_periods  = 2
-  metric_name         = "nginx_up"
-  namespace           = "Nginx"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 1
-  alarm_description   = "Trigger when NGINX is down"
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-
-  dimensions = {
-    InstanceId = aws_instance.nginx.id
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
-
-  tags = local.common_tags
-}
-
-# CloudWatch Alarm for NGINX Active Connections
-resource "aws_cloudwatch_metric_alarm" "nginx_connections" {
-  alarm_name          = "${var.project}-nginx-connections"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 2
-  metric_name         = "nginx_connections_active"
-  namespace           = "Nginx"
-  period              = 60
-  statistic           = "Average"
-  threshold           = 1000
-  alarm_description   = "Trigger when NGINX active connections exceed threshold"
-  alarm_actions       = [aws_sns_topic.alerts.arn]
-
-  dimensions = {
-    InstanceId = aws_instance.nginx.id
+  backend "s3" {
+    bucket = "terraform-binhbe"
+    key    = "terraform.tfstate"
+    region = "ap-southeast-1"
   }
-
-  tags = local.common_tags
-}
-
-resource "aws_iam_role_policy_attachment" "monitoring_ssm_attach" {
-  role       = aws_iam_role.monitoring_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }

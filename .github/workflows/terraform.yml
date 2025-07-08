@@ -31,7 +31,7 @@ jobs:
 
       - name: Terraform Init
         id: init
-        run: terraform init
+        run: terraform init -backend-config="region=${{ env.AWS_REGION }}"
 
       - name: Terraform Validate
         id: validate
