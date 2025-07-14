@@ -595,16 +595,3 @@ chown ec2-user:ec2-user /home/ec2-user/prometheus.yml /home/ec2-user/docker-comp
 EOF
 }
 
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-  backend "s3" {
-    bucket = "terraform-binhbe"
-    key    = "terraform.tfstate"
-    region = "ap-southeast-1"
-  }
-}
